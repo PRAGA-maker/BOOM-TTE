@@ -78,7 +78,11 @@ def _load_qm9_data(target, split_file):
         f"id_{target}": copy.deepcopy(subset_dict),
     }
     # get column for target values, ood, and train
-    value_column = data[0].split(",").index("qm9_" + target)
+    # Handle case mismatch for Cv (capital C in data, lowercase in target)
+    target_col = "qm9_" + target
+    if target == "cv":
+        target_col = "qm9_Cv"
+    value_column = data[0].split(",").index(target_col)
     ood_column = value_column + 2
     train_column = value_column + 3
 
