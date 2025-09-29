@@ -54,3 +54,34 @@
 - All datasets auto-generate splits if not present
 - Random Forest is the quickest baseline to run
 - Advanced models require additional dependencies and setup
+
+
+Prior research has shown:
+
+Dataset	HoF	Density	HOMO	LUMO	GAP	ZPVE	R²	α	µ	Cᵥ
+Best Performing Model (ID)	MACE	EGNN	ET	ET	ET	Graphormer (3D)	MACE	MACE	ET	MolFormer
+Best Performing Model (OOD)	EGNN	TGNN	ET	ET	TGNN	MACE, TGNN	MACE	MACE	MACE	MACE
+
+## HoF Baselines: MACE and EGNN
+
+- MACE HoF
+  - Commands:
+    ```bash
+    cd experiments/mace
+    python make_splits.py
+    mace_run_train --config=configs/hof.yaml
+    python make_plots.py
+    ```
+  - Outputs:
+    - Model: `experiments/mace/hof.model`
+    - Plot: `experiments/mace/mace_hof.png`
+
+- EGNN (EquivariantGNN) HoF
+  - Runner added: `experiments/gnn-ablation/run_hof_equivariant.py`
+  - Command:
+    ```bash
+    python experiments/gnn-ablation/run_hof_equivariant.py --device cuda --lr 1e-3 --batch_size 32 --epochs 100
+    ```
+  - Outputs:
+    - CSV: `experiments/gnn-ablation/results/results_EquivariantGNN_HoF.csv`
+    - Plot: `experiments/gnn-ablation/results/EquivariantGNN_HoF_parity_plot.png`

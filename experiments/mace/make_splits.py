@@ -4,7 +4,7 @@
 ##
 ## SPDX-License-Identifier: Apache-2.0
 ################################################################################
-from flask_ood.datasets.CoordDataset import CoordDataset, QM9CoordDataset
+from boom.datasets.CoordDataset import CoordDataset, QM9CoordDataset
 from ase import Atoms
 import os
 

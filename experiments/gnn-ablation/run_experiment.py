@@ -25,7 +25,6 @@ parser.add_argument(
     default="topological",
     help="Model to train. Options are 'topological (T)', 'invariant(I)', 'equivariant(E)'",
 )
-args = parser.parse_args()
 
 
 def run_experiment(
@@ -328,6 +327,7 @@ def train_equivariant_gnn(
 
 
 def main():
+    args = parser.parse_args()
     if args.model.lower() == "topological" or args.model.lower() == "t":
         train_topological_gnn()
     elif args.model.lower() == "invariant" or args.model.lower() == "i":

@@ -122,12 +122,12 @@ def process_results(results, plotter):
     np.save(f"./results/{target}/{target}_ood_real.npy", real_ood_vals)
 
     true_labels = {
-        "iid": real_iid_vals,
+        "id": real_iid_vals,
         "ood": real_ood_vals,
     }
 
     fake_labels = {
-        "iid": pred_iid_vals,
+        "id": pred_iid_vals,
         "ood": pred_ood_vals,
     }
 
@@ -157,12 +157,12 @@ def plot_results(target, plotter):
     real_ood_vals = np.load(f"./results/{target}/{target}_ood_real.npy")
 
     true_labels = {
-        "iid": real_iid_vals,
+        "id": real_iid_vals,
         "ood": real_ood_vals,
     }
 
     fake_labels = {
-        "iid": pred_iid_vals,
+        "id": pred_iid_vals,
         "ood": pred_ood_vals,
     }
     fig = plotter(true_labels, fake_labels, title=target, model_name="Random Forest")
@@ -171,7 +171,7 @@ def plot_results(target, plotter):
 
 def main():
     train_dataset = TrainDensityDataset()
-    iid_test_dataset = IIDDensityDataset()
+    iid_test_dataset = IDDensityDataset()
     ood_test_dataset = OODDensityDataset()
 
     results = run_experiment(
@@ -180,7 +180,7 @@ def main():
     process_results(results, DensityOODParityPlot)
 
     train_dataset = TrainHoFDataset()
-    iid_test_dataset = IIDHoFDataset()
+    iid_test_dataset = IDHoFDataset()
     ood_test_dataset = OODHoFDataset()
 
     results = run_experiment(
