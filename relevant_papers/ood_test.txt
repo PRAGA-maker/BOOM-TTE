@@ -1,0 +1,898 @@
+Note -- The paper finds that pretraining is extremely important. 
+
+The base idea is on two first-principles / observations: 
+1. ML models seem to be really inefficient at heterogenous populations. The mainstream regime is either train a highly specialized model using limited data (which fails on OOD -- this is why pretraining seems to be so important) or use a ton of data and spend a lot of resources generalizing it, but then on-inference your goal is to re-add that bias, which also takes a lot of resources. It seems really inefficient for models to spend so much resources on removing bias in data, then reapplying it on your one sample. This is the idea behind what I'm calling "Bayesian Bias Shifting", where instead you can shift bias with the synatax of do-calculus or something similar. This leads into: 
+2. A good way to get better results in LLMs is to give examples. We follow this approach, where we identify what data we do have that is similar to what we want, and then identify how the differences between the two affect the KPI we care about. This is especially important in "highly hierarchical problems" (problems where we can observe only 1-ary or 2nd-ary effects or causal variables, but truely there are many more layers of variables inplay), because neural nets are bad at keeping track of all of these, but using this approach we can cut that space into a much smaller chunk, and because we're identifying truely casual effects we consume all of that deeper causal knowledge ie. all paths from causal variable A to B while treating the mechanism as unknown. This is the same reason we're able to use TTEs in medicine, because even without simulating the entire mechanism of the body, we are able to awnser questions based on observational data.
+
+
+The goal is to I had an idea: the idea is just that instead of using RCTs to take individual data, generalizing witi loss bottleneck, then inferencing readding context priors etc however you frame it to refit the individual, instead we can simply create a method where we simply shift bias from person to person to refit them, no generalization required. so shifting bias —> more like do-calc so, in this case, let's take the HoF data. we could use, for now, RDKit Featurizer will work, or later I can train a model based on the PNAS paper. We take those variables representing our molecule (this long-term will be a big problem to work on, for now, this works), and use them as our causal variables here. We would say, ok what is our closest trainset data to our current molecule via something like a RDKIT vectorizer similarity search. Once we identify the closest, we featurize both. We then look at all the features. Say there are 100 features and 5 are different. For each different feature, we run a TTE to test how much that difference in features, say, molecular weight +5 affects our KPI we care about (in this case, HoF) iterating over all different features, would we be able to simply add up all of the differences? if we can assume independent variables then I think we can, but in this case we cannot, so not sure how to do this step. Do-calc or Bayesians will definiately have awnsers for us. The research plan for this would be to look at: one OOD and one ID molecule and see if we can achieve convergence: start from any 100 random molecules and arrive to the same prediction. This is an important causality check to see if we are seeing signal or how much IPTW is wrong. (or if we can washout IPTW bias by averaging a ton of predictions) if this is successful with successful convergence, then we go onto the 2nd test: benchmarking on OOD on BOOM really think about the core question: How to Combine Causal Effects? I feel like this is probably pretty fundamental / basic in causality theory that can be found in the literature.
+
+
+This (above) idea is a bit uninfomred, putting it into good causal grammer, the solution would look like:
+
+Think of a modified treatment policy (MTP) as you hard-coding the “bias shift” you want the world to perform, then estimating the expected outcome under that policy-perturbed world using observed data. Formally, start with units 
+𝑖
+=
+1
+,
+…
+,
+𝑛
+i=1,…,n and observed tuples 
+𝑂
+𝑖
+=
+(
+𝑋
+𝑖
+,
+𝐴
+𝑖
+,
+𝑌
+𝑖
+)
+O
+i
+	​
+
+=(X
+i
+	​
+
+,A
+i
+	​
+
+,Y
+i
+	​
+
+), where 
+𝑋
+X is pre-treatment context (your pretrained contextual embedding: scaffold family, size/heteroatom pattern, local environment encodings, etc.), 
+𝐴
+A is the exposure/treatment you’re willing to intervene on, and 
+𝑌
+Y is the target (e.g., HoF). An MTP is a known mapping 
+𝑑
+(
+𝑎
+,
+𝑥
+)
+d(a,x) (deterministic policy) or a kernel 
+𝑞
+(
+𝑎
+∣
+𝑥
+)
+q(a∣x) (stochastic policy) that says how the exposure would be modified as a function of the natural value and context. The causal target is the population mean outcome under that policy, 
+𝜓
+=
+𝐸
+[
+𝑌
+𝑑
+(
+𝐴
+,
+𝑋
+)
+]
+ψ=E[Y
+d(A,X)
+] for deterministic 
+𝑑
+d, or 
+𝜓
+=
+𝐸
+𝑋
+ ⁣
+∑
+𝑎
+𝑚
+(
+𝑎
+,
+𝑋
+)
+ 
+𝑞
+(
+𝑎
+∣
+𝑋
+)
+ψ=E
+X
+	​
+
+∑
+a
+	​
+
+m(a,X)q(a∣X) for stochastic 
+𝑞
+q, with 
+𝑚
+(
+𝑎
+,
+𝑥
+)
+=
+𝐸
+[
+𝑌
+∣
+𝐴
+=
+𝑎
+,
+𝑋
+=
+𝑥
+]
+m(a,x)=E[Y∣A=a,X=x]. Identification under standard exchangeability/consistency requires no mechanistic model; it uses the g-formula 
+𝜓
+=
+𝐸
+{
+𝑚
+(
+𝑑
+(
+𝐴
+,
+𝑋
+)
+,
+𝑋
+)
+}
+ψ=E{m(d(A,X),X)} (deterministic) or 
+𝜓
+=
+𝐸
+𝑋
+ ⁣
+∑
+𝑎
+𝑚
+(
+𝑎
+,
+𝑋
+)
+𝑞
+(
+𝑎
+∣
+𝑋
+)
+ψ=E
+X
+	​
+
+∑
+a
+	​
+
+m(a,X)q(a∣X) (stochastic). This is exactly the “use causal knowledge to make informed predictions” objective: you’re not asking for the effect of an ill-posed “set Weight:=+5” intervention; you’re asking for the outcome under a well-posed policy that shifts the exposure in a reproducible way. In continuous-exposure settings one very convenient class is additive shift MTPs 
+𝑑
+𝛿
+(
+𝑎
+,
+𝑥
+)
+=
+𝑎
++
+𝛿
+d
+δ
+	​
+
+(a,x)=a+δ (possibly truncated to the support), which deliver the “bias shift” you described but avoid extrapolating off the manifold because you only shift where feasible; in discrete settings (e.g., structural edits) you let 
+𝐴
+A be a finite set of edit types and define a policy 
+𝑑
+d that maps “no-edit/edit-j” to “apply minimal edit achieving ≈
+𝛿
+δ-mass increase when feasible; otherwise leave as is.” These policies are the causal counterpart of your “Bayesian bias shifting”: they operate at the policy level (what shift to apply) rather than pretending a derived quantity (like weight) is an atomic cause. The estimation then becomes off-policy evaluation with doubly-robust learning: fit 
+𝑚
+(
+𝑎
+,
+𝑥
+)
+m(a,x) and the observed treatment mechanism 
+𝑔
+(
+𝑎
+∣
+𝑥
+)
+=
+𝑝
+(
+𝐴
+=
+𝑎
+∣
+𝑋
+=
+𝑥
+)
+g(a∣x)=p(A=a∣X=x) using flexible ML (your pretrained contextual model is ideal for 
+𝑚
+m, and a conditional density/softmax model for 
+𝑔
+g), and combine them so you are consistent if either is right. For a continuous shift 
+𝐴
+’
+=
+𝐴
++
+𝛿
+A’=A+δ without truncation, the efficient one-step/AIPW estimator takes the simple, low-level form
+
+𝜓
+^
+DR
+(
+𝛿
+)
+=
+1
+𝑛
+∑
+𝑖
+=
+1
+𝑛
+[
+𝑚
+^
+(
+𝐴
+𝑖
++
+𝛿
+,
+𝑋
+𝑖
+)
+⏟
+g-comp term
++
+(
+𝑌
+𝑖
+−
+𝑚
+^
+(
+𝐴
+𝑖
+,
+𝑋
+𝑖
+)
+)
+𝑔
+^
+(
+𝐴
+𝑖
+−
+𝛿
+∣
+𝑋
+𝑖
+)
+𝑔
+^
+(
+𝐴
+𝑖
+∣
+𝑋
+𝑖
+)
+⏟
+augmentation term
+]
+,
+ψ
+^
+	​
+
+DR
+	​
+
+(δ)=
+n
+1
+	​
+
+i=1
+∑
+n
+	​
+
+[
+g-comp term
+m
+^
+(A
+i
+	​
+
++δ,X
+i
+	​
+
+)
+	​
+
+	​
+
++
+augmentation term
+(Y
+i
+	​
+
+−
+m
+^
+(A
+i
+	​
+
+,X
+i
+	​
+
+))
+g
+^
+	​
+
+(A
+i
+	​
+
+∣X
+i
+	​
+
+)
+g
+^
+	​
+
+(A
+i
+	​
+
+−δ∣X
+i
+	​
+
+)
+	​
+
+	​
+
+	​
+
+],
+
+with indicator/Jacobian factors added automatically when you clip the shift at boundaries (
+𝐴
+𝑖
+±
+𝛿
+A
+i
+	​
+
+±δ must lie in the support). Intuition: the first term predicts what 
+𝑌
+Y would be if you nudged the exposure by 
+𝛿
+δ (your bias shift), evaluated with your learned outcome model; the second term debiases that prediction using importance ratios of the observed density to “pre-image” density under the shift, ensuring 
+𝑛
+n
+	​
+
+-valid inference and robustness even when 
+𝑚
+^
+m
+^
+ is imperfect. This exact formula (with the 
+𝑔
+^
+(
+𝑎
+−
+𝛿
+∣
+𝑥
+)
+/
+𝑔
+^
+(
+𝑎
+∣
+𝑥
+)
+g
+^
+	​
+
+(a−δ∣x)/
+g
+^
+	​
+
+(a∣x) ratio) is the efficient influence-function–based estimator for additive MTPs and is implemented in standard software; it’s the workhorse that makes shift-policies practical with modern function learners. 
+CRAN
++1
+
+When the exposure is discrete (e.g., an edit 
+𝐴
+∈
+{
+0
+,
+1
+,
+…
+,
+𝐽
+}
+A∈{0,1,…,J}), take a stochastic policy 
+𝑞
+(
+𝑎
+∣
+𝑥
+)
+q(a∣x) that embodies your version selection (e.g., “choose the minimal +14 Da edit with probability 1 if the local motif exists, else choose no-edit”). The identified parameter becomes 
+𝜓
+=
+𝐸
+𝑋
+∑
+𝑎
+𝑚
+^
+(
+𝑎
+,
+𝑋
+)
+ 
+𝑞
+(
+𝑎
+∣
+𝑋
+)
+ψ=E
+X
+	​
+
+∑
+a
+	​
+
+m
+^
+(a,X)q(a∣X). A doubly-robust estimator is then
+
+𝜓
+^
+DR
+=
+1
+𝑛
+∑
+𝑖
+=
+1
+𝑛
+[
+∑
+𝑎
+𝑚
+^
+(
+𝑎
+,
+𝑋
+𝑖
+)
+ 
+𝑞
+(
+𝑎
+∣
+𝑋
+𝑖
+)
+  
++
+  
+𝑞
+(
+𝐴
+𝑖
+∣
+𝑋
+𝑖
+)
+𝑔
+^
+(
+𝐴
+𝑖
+∣
+𝑋
+𝑖
+)
+{
+𝑌
+𝑖
+−
+𝑚
+^
+(
+𝐴
+𝑖
+,
+𝑋
+𝑖
+)
+}
+]
+,
+ψ
+^
+	​
+
+DR
+	​
+
+=
+n
+1
+	​
+
+i=1
+∑
+n
+	​
+
+[
+a
+∑
+	​
+
+m
+^
+(a,X
+i
+	​
+
+)q(a∣X
+i
+	​
+
+)+
+g
+^
+	​
+
+(A
+i
+	​
+
+∣X
+i
+	​
+
+)
+q(A
+i
+	​
+
+∣X
+i
+	​
+
+)
+	​
+
+{Y
+i
+	​
+
+−
+m
+^
+(A
+i
+	​
+
+,X
+i
+	​
+
+)}],
+
+which you can read as plug-in under the target policy plus an IPW correction that reweights each observed outcome by how much the target policy would favor that action relative to how often it naturally occurred. This is the crisp, low-level way to “shift bias” across heterogeneous version mixes without assuming all versions are equivalent; the policy is the versions. These stochastic-policy parameters were introduced precisely to handle feasible interventions and to relax positivity problems that plague deterministic “set-to” interventions with continuous/multivalued 
+𝐴
+A. 
+PMC
++1
+
+Algorithmically for your HoF project you define 
+𝑋
+X by pretraining a contextual encoder (your PNAS-style contextualized model) on diverse chemistry to produce sample-specific, pre-treatment embeddings that capture scaffold and local context; this is the variance-reduction and heterogeneity-modeling engine and corresponds to the “context encoder” idea used for personalized modeling in heterogeneous populations. Then you pick your exposure and policy: if you insist on “weight,” use a continuous shift 
+𝑑
+𝛿
+(
+𝑤
+,
+𝑥
+)
+=
+clip
+(
+𝑤
++
+𝛿
+)
+d
+δ
+	​
+
+(w,x)=clip(w+δ) but restrict to contexts where both 
+𝑤
+w and 
+𝑤
++
+𝛿
+w+δ are supported; if you prefer chemically faithful actions (recommended), let 
+𝐴
+A index a small library of MMP edits and define a deterministic/stochastic policy that maps the natural edit state to “apply the minimal edit that achieves ≈
+𝛿
+δ Da increase at the chosen site if feasible, else no-edit.” That policy prevents the amalgamation/hidden-versions problem because each base molecule/context has a single version dictated by 
+𝑑
+d (deterministic) or a known version distribution 
+𝑞
+q (stochastic). You then emulate a single, parallel-arm trial of the policy versus status-quo across all eligible molecules: (i) filter to eligibility 
+𝐼
+{
+policy feasible at 
+(
+𝑆
+,
+𝑋
+)
+}
+I{policy feasible at (S,X)}; (ii) fit 
+𝑚
+^
+m
+^
+ with your best pretrained model (GNN/transformer + context) to map 
+(
+𝐴
+,
+𝑋
+)
+→
+𝑌
+(A,X)→Y; (iii) fit 
+𝑔
+^
+(
+⋅
+∣
+𝑋
+)
+g
+^
+	​
+
+(⋅∣X) (softmax for discrete 
+𝐴
+A; conditional density/flow for continuous 
+𝐴
+A); (iv) compute 
+𝜓
+^
+DR
+ψ
+^
+	​
+
+DR
+	​
+
+ as above with cross-fitting; (v) get valid CIs from the empirical variance of the estimated efficient influence function. This “one big trial” is exactly your bias-shifting objective, but it is policy-level and therefore well-posed and robust. The literature calls this class LMTP when there are multiple time points; at a single time point it’s the same idea. These papers provide the identification, the 
+𝑛
+n
+	​
+
+ theory, and efficient estimators you can drop in with your favorite ML for 
+𝑚
+^
+,
+𝑔
+^
+m
+^
+,
+g
+^
+	​
+
+. 
+EPI Research
++2
+arXiv
++2
+
+Why this fits your needs and why it’s strong on OOD is that the estimand itself respects the data support and the chemical manifold. A naïve “set 
+𝑊
+:
+=
+𝑊
++
+𝛿
+W:=W+δ” demands outcomes for covariate cells that may not exist (classic positivity failure); the MTP only evaluates the shift where your mapping leaves you on-manifold—for a continuous shift you explicitly guard with clipping/eligibility; for discrete edits you only apply the edit in contexts observed in your corpus. That means the weighting ratio for the augmentation term (for continuous shifts it’s 
+𝑔
+^
+(
+𝐴
+−
+𝛿
+∣
+𝑋
+)
+/
+𝑔
+^
+(
+𝐴
+∣
+𝑋
+)
+g
+^
+	​
+
+(A−δ∣X)/
+g
+^
+	​
+
+(A∣X)) is bounded in the regions you actually use, dramatically improving finite-sample stability. In other words, you are not extrapolating to “fantasy molecules”; you are reweighting toward a realistic alternate world. Because BOOM defines OOD as property-tail extrapolation that defeats standard predictors, your MTP estimand lets you ask the right local question: “what is the expected HoF after the minimal feasible +14 Da shift in this context?” rather than “what is the HoF for a hypothetical molecule with weight +14 and everything else unchanged,” and that aligns with discovery-regime evaluation while avoiding most of the tail-support pathologies. Empirically BOOM shows OOD generalization degrades badly and that pretraining choices matter; in this setup the pretraining helps nuisance learning (
+𝑚
+^
+,
+𝑔
+^
+m
+^
+,
+g
+^
+	​
+
+) and context encoding, while the MTP prevents you from defining an impossible target in the first place. 
+
+boom
+
+ 
+
+boom
+
+ 
+
+boom
+
+You also asked about additivity and whether MSMs could “reweight wrong trials to respect additivity.” In this framework additivity is a modeling choice about the effect scale, not something IPTW can enforce. If you want the composition of multiple small shifts/edits to “add,” choose a scale where it’s plausible (often the log-scale for multiplicative composition), then either (a) evaluate small δ-policies along a path (local linearity makes first-order additivity accurate; any departure shows up as second-order interaction terms you can estimate), or (b) fit a marginal structural model for 
+𝐸
+[
+𝑌
+𝜋
+]
+E[Y
+π
+] (or for the blip/contrast in a structural nested mean model) that includes only main effects plus heavily penalized interactions so that, unless the data demand it, interactions shrink toward zero and you recover near-additivity on your chosen scale. MSM/SNMM are complementary modeling shells for how you summarize the policy effect; the MTP defines the estimand and supplies the EIF/DR machinery. If forced to choose for your use-case—policy-level bias shifting with minimal extrapolation and OOD robustness—MTP beats a plain MSM (which, without a policy definition, collapses versions and revisits the SUTVA/amalgamation trap); use MSM/SNMM on top of MTP if you want a sparse, additive summary of multi-step edits. 
+EPI Research
++1
+
+Concretely, here’s how you would run it tomorrow for HoF. Build 
+𝑋
+X with your contextual encoder (pretraining on large chemistry so 
+𝑋
+X captures scaffold/local context heterogeneity, as advocated in contextualized modeling for heterogeneous populations). Define a tiny edit library and a deterministic δ-policy 
+𝑑
+d: “if the base molecule has a methyl-eligible site, replace H by CH
+3
+3
+	​
+
+” (≈ +14 Da); else leave it. Restrict to molecules where both treated/untreated versions are represented in your corpus (eligibility = positivity check). Fit 
+𝑚
+^
+(
+𝑎
+,
+𝑥
+)
+m
+^
+(a,x) (e.g., transformer/GNN + context) and 
+𝑔
+^
+(
+𝑎
+∣
+𝑥
+)
+g
+^
+	​
+
+(a∣x) (softmax over {no-edit, +CH
+3
+3
+	​
+
+}). Compute 
+𝜓
+^
+DR
+ψ
+^
+	​
+
+DR
+	​
+
+ for that one policy. If you want to walk from a known molecule to a target, define a sequence of such δ-policies (each the “shortest MMP step” feasible in context), accumulate additive contributions on the log-scale (or another scale you pre-specify), and keep a tiny set of interaction terms with strong shrinkage; your estimator remains the same DR form, applied to each step/policy, with valid CIs from the EIF. This gives you your “very simple” composition—with explicit uncertainty and a clean causal target—while keeping you on-manifold and letting the pretrained encoder do the heavy lifting in 
+𝑚
+m and 
+𝑔
+g. 
+
+ellington-et-al-2025-learning-t…
+
+ 
+
+ellington-et-al-2025-learning-t…
+
+All of the above is standard, first-principles causal math for stochastic interventions/LMTPs (identification by the g-formula, efficient influence functions, and doubly-robust/targeted estimators), with off-the-shelf implementations for additive shifts (continuous 
+𝐴
+A) and policy-based interventions (discrete 
+𝐴
+A). That’s why it maps so naturally to your “Bayesian bias shifting” idea: you specify the bias shift as a policy, then do valid, variance-efficient off-policy evaluation with your contextual pretraining providing the inductive bias where it belongs (the nuisance learners), rather than asking a misspecified estimand to carry the load. 
+PMC
++2
+EPI Research
++2
