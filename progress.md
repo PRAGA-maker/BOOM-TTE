@@ -85,3 +85,65 @@ Best Performing Model (OOD)	EGNN	TGNN	ET	ET	TGNN	MACE, TGNN	MACE	MACE	MACE	MACE
   - Outputs:
     - CSV: `experiments/gnn-ablation/results/results_EquivariantGNN_HoF.csv`
     - Plot: `experiments/gnn-ablation/results/EquivariantGNN_HoF_parity_plot.png`
+
+
+## NL-MTP HoF Experiment (Neurallambda + Transformer, Policy Evaluation)
+
+- Objective: Train a single, fixed-recipe homoiconic transformer with fast-weights to perform policy evaluation (MTP) on HoF under a fixed policy shift δ=+14 Da (do:W+=δ). Produce ID/OOD RMSE and a parity/contrast plot.
+
+- Data I/O (deterministic):
+  - Input table: `id, smiles, y (HoF), env`.
+  - Derived features: `x_ctx` (RDKit pre-treatment descriptors only), `mw` (ExactMolWt), `env_idx`.
+  - Optional: `mmp_pairs` (RDKit MMPA minimal edits, small Δmass) for early self-supervised semantics.
+
+- Splits:
+  - Scaffold-based split (Murcko) to form ID train/val and OOD test.
+
+- Sequence layout and masking:
+  - Tokens: [ENV e] [CONTEXT x_ctx] [A: mw] [SMILES tokens...] <time0> [do: W+=δ] <probe>.
+  - Attention mask: post-<time0> attends to pre-<time0>; pre-<time0> cannot attend to post-treatment tokens.
+
+- Fast-weights (LoR) injection (fixed):
+  - Apply low-rank updates at attention Q/K/O and MLP out, layers {3,7,11}, rank=8.
+  - LoR activated only after encountering [do: W+=δ]; amplitude α(x,δ)∈[0,1] with norm/rank penalties.
+
+- Heads:
+  - Outcome head m̂(a,x) on log(HoF−c) (stabilized).
+  - Propensity head ĝ(a|x): MDN (K=8 Gaussians) on pre-policy CLS.
+  - Support gate s(x,a,δ)∈[0,1] for positivity/abstention.
+
+- Losses (single recipe):
+  - L_obs: supervised MSE on observed world.
+  - L_mdn: MDN NLL for A|X.
+  - DR/AIPW policy losses: L_DR-func (unit-level) + L_DR-mean (scalar ψ(δ)).
+  - L_rex: invariance penalty (variance of policy-head per-env losses).
+  - L_lor: locality (α^2) + low-rank Frobenius penalties.
+  - L_mmp: early warmup auxiliary on descriptor deltas for MMP pairs.
+  - Total: 1.0·L_DR-func + 0.2·L_DR-mean + 1.0·L_obs + 0.5·L_mdn + 0.2·L_rex + 0.1·L_lor + 0.2·(warmup·L_mmp).
+
+- Training loop (fixed):
+  - Optimizer: AdamW (lr=2e-4), cosine LR with warmup (2k steps), grad clip=1.0.
+  - Batch: mix multiple envs; δ=+14 for all; drop samples failing support gate.
+  - Two passes per batch: observed-world (no LoR) and policy-world (LoR active after <time0>).
+  - Log ID/OOD metrics each epoch; save checkpoints and reports.
+
+- Evaluation:
+  - Report RMSE/MAE (observed), policy contrast Δpred = m̂(A+δ,X) − m̂(A,X), local linearity checks vs δ, abstention rates, env variance for policy head, OOD plots.
+
+- New experiment folder: `experiments/gnn-nlmtp` (built from `experiments/gnn-ablation` structure but transformer-based):
+  - `dataset.py` (pseudocode): load `feats.parquet`, scaffold split, RDKit features, dataloaders yielding {smiles, x_ctx, mw, y, env_idx} and optional MMP batches.
+  - `model.py` (pseudocode): NL_MTP_Model with backbone encoder, LoR at layers {3,7,11}, outcome/MDN/support heads, do-token metaweight projection, attention masks.
+  - `trainer.py` (pseudocode): observed/policy passes, compute losses, step optimizer, early MMP auxiliary, REx penalty across envs.
+  - `eval.py` (pseudocode): compute ID/OOD metrics, save `reports/metrics.json`, parity/contrast plots.
+  - `run_experiment.py` (pseudocode): CLI, train/val/test orchestration, artifact paths, W&B logging.
+  - `README.md`: commands and outputs.
+
+- Integration points:
+  - Reuse experiment/scaffold style from `experiments/gnn-ablation` (runner, trainer patterns, results folder).
+  - Import transformer blocks from `nl/neurallambda/src/neurallambda/model/recurrent_transformer.py` (DecoderLayer, positional encoding) and follow NL attention masking patterns.
+
+- Fixed hyperparameters (no decisions during dev):
+  - Layers=12, hidden size per backbone per choice; LoR rank=8 on layers {3,7,11}. K=8 (MDN). δ=+14. Batch=64. Warmup epochs=5 for L_mmp.
+
+
+    

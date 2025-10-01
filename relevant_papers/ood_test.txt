@@ -10,3 +10,14 @@ The goal is to I had an idea: the idea is just that instead of using RCTs to tak
 
 This (above) idea is a bit uninfomred, putting it into good causal grammer, the solution would look like:
 
+
+---
+NL-MTP Working Notes (HoF, δ=+14)
+
+- Fixed estimand: MTP do:W+=δ on log(HoF−c). Two-pass forward: observed world (no LoR), policy world (LoR active after <time0>).
+- Positivity: support gate s(x,a,δ) and s(x,a−δ,δ)≥0.6, otherwise abstain; clip g(A−δ|X)/g(A|X)≤20.
+- Invariance: apply REx-style penalty only on policy-head; mix envs per batch.
+- MMP surrogates: early epochs predict descriptor deltas under do:W+=|ΔMW| to teach policy semantics; does not supervise HoF directly.
+- Architecture: LoR on layers {3,7,11}, rank=8; Q/K/O and MLP-out only; α(x,δ) gate with small-norm penalty.
+- Data: RDKit descriptors for x_ctx (pre-treatment only), ExactMolWt for A; scaffold split for OOD.
+- Evaluation: ID/OOD RMSE on observed Y; policy contrast stability; abstention rate; local linearity in δ; env variance of policy head.
