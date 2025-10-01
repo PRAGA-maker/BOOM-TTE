@@ -17,6 +17,7 @@ Run all the experiments using the following command:
 python run_experiments.py
 ```
 
+Note: For a transformer-based NL-MTP HoF policy evaluation setup (δ=+14), see `experiments/gnn-nlmtp`, which follows similar runner/trainer/results conventions.
 ## Results
 
 ### 10K CSD dataset

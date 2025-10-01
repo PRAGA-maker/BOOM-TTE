@@ -130,13 +130,16 @@ Best Performing Model (OOD)	EGNN	TGNN	ET	ET	TGNN	MACE, TGNN	MACE	MACE	MACE	MACE
 - Evaluation:
   - Report RMSE/MAE (observed), policy contrast Δpred = m̂(A+δ,X) − m̂(A,X), local linearity checks vs δ, abstention rates, env variance for policy head, OOD plots.
 
-- New experiment folder: `experiments/gnn-nlmtp` (built from `experiments/gnn-ablation` structure but transformer-based):
-  - `dataset.py` (pseudocode): load `feats.parquet`, scaffold split, RDKit features, dataloaders yielding {smiles, x_ctx, mw, y, env_idx} and optional MMP batches.
-  - `model.py` (pseudocode): NL_MTP_Model with backbone encoder, LoR at layers {3,7,11}, outcome/MDN/support heads, do-token metaweight projection, attention masks.
-  - `trainer.py` (pseudocode): observed/policy passes, compute losses, step optimizer, early MMP auxiliary, REx penalty across envs.
-  - `eval.py` (pseudocode): compute ID/OOD metrics, save `reports/metrics.json`, parity/contrast plots.
-  - `run_experiment.py` (pseudocode): CLI, train/val/test orchestration, artifact paths, W&B logging.
-  - `README.md`: commands and outputs.
+- New experiment folder: `experiments/gnn-nlmtp` (full implementation):
+  - ✅ `dataset.py`: RDKit features (Morgan+MACCS+descriptors) for x_ctx, ExactMolWt for A, env_idx bucketing, dataloaders.
+  - ✅ `model.py`: Full NL_MTP_Model with 12-layer transformer, multi-token sequence [ENV][CTX][A]<TIME0>[DO][PROBE], time-zero attention mask, LoR on Q/K/O+MLP-out at layers {3,7,11} rank=8, outcome/MDN/support/desc_delta heads, alpha gating, learnable ψ.
+  - ✅ `trainer.py`: Observed/policy two-pass, DR/AIPW losses (unit+scalar), MDN NLL, per-env REx variance, LoR locality penalties, support gating, importance weight clipping, complete MMP descriptor delta warmup loss.
+  - ✅ `eval.py`: ID/OOD RMSE/MAE, policy contrast, parity plots, JSON metrics writer.
+  - ✅ `run_experiment.py`: CLI with AdamW+OneCycleLR, 30 epochs, best-model checkpointing, full metrics logging.
+  - Commands:
+  - Script: `python experiments/gnn-nlmtp/run_experiment.py --device cuda --batch_size 64 --epochs 30 --delta 14`
+  - Notebook: `jupyter notebook experiments/gnn-nlmtp/run_experiment.ipynb`
+- Status: ✅ **PRODUCTION-READY** - All pseudo/placeholder code removed, complete implementation verified
 
 - Integration points:
   - Reuse experiment/scaffold style from `experiments/gnn-ablation` (runner, trainer patterns, results folder).
@@ -147,3 +150,8 @@ Best Performing Model (OOD)	EGNN	TGNN	ET	ET	TGNN	MACE, TGNN	MACE	MACE	MACE	MACE
 
 
     
+
+
++====
+
+
