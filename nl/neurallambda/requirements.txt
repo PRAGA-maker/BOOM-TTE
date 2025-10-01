@@ -1,0 +1,21 @@
+# Deps
+torch
+numpy
+lark
+
+
+# Testing
+pytest
+matplotlib
+
+
+# Experimentation
+matplotlib
+datasets
+ray[tune]
+ray[data]
+
+
+# LLMs
+transformers
+accelerate

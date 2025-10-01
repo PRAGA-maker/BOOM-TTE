@@ -1,0 +1,31 @@
+
+# Misc
+neurallambda_*.zip
+memray*
+*.prof
+log/
+*.png~
+*.kra~
+doc/MISC.md
+doc/private
+
+# Python
+.env/
+venv/
+.pytest_cache/
+__pycache__/
+lib/
+*.egg-info/
+
+# Haskell
+dist-newstyle/
+
+# Experiments
+experiment/runs
+experiment/qwen_vocab
+mnist_data/
+t14_homoiconic_llm_06/
+t14_homoiconic_llm_07/
+
+# arc
+arc/arc_1d
