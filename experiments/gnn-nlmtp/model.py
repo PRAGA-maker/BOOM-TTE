@@ -273,33 +273,89 @@ class NL_MTP_Model(nn.Module):
         mask[:time0_pos, time0_pos:] = float('-inf')
         return mask
     
-    def _apply_lor(
+    def _get_adapted_weights(
         self,
         layer: DecoderLayer,
         layer_ix: int,
         alpha: float,
     ):
-        """Apply LoR deltas to Q/K/O attention + MLP-out (second FFN linear)."""
+        """Get adapted weights for LoR layers without modifying originals."""
         if layer_ix not in self.lor_layers:
-            return
+            return None
         
-        # Attention projections
         attn = layer.self_attn
-        attn.q_proj.weight.data = self.adapters_q[str(layer_ix)](attn.q_proj.weight.data).lerp(
-            attn.q_proj.weight.data, 1 - alpha
-        )
-        attn.k_proj.weight.data = self.adapters_k[str(layer_ix)](attn.k_proj.weight.data).lerp(
-            attn.k_proj.weight.data, 1 - alpha
-        )
-        attn.out_proj.weight.data = self.adapters_o[str(layer_ix)](attn.out_proj.weight.data).lerp(
-            attn.out_proj.weight.data, 1 - alpha
-        )
-        
-        # MLP output projection (layer.ffnn[3])
         mlp_out = layer.ffnn[3]
-        mlp_out.weight.data = self.adapters_mlp[str(layer_ix)](mlp_out.weight.data).lerp(
-            mlp_out.weight.data, 1 - alpha
-        )
+        
+        # Compute adapted weights as W_adapted = W_orig + alpha * (U @ V)
+        W_q_adapted = attn.q_proj.weight + alpha * (self.adapters_q[str(layer_ix)].U @ self.adapters_q[str(layer_ix)].V)
+        W_k_adapted = attn.k_proj.weight + alpha * (self.adapters_k[str(layer_ix)].U @ self.adapters_k[str(layer_ix)].V)
+        W_o_adapted = attn.out_proj.weight + alpha * (self.adapters_o[str(layer_ix)].U @ self.adapters_o[str(layer_ix)].V)
+        W_mlp_adapted = mlp_out.weight + alpha * (self.adapters_mlp[str(layer_ix)].U @ self.adapters_mlp[str(layer_ix)].V)
+        
+        return {
+            'q': W_q_adapted,
+            'k': W_k_adapted,
+            'o': W_o_adapted,
+            'mlp': W_mlp_adapted
+        }
+    
+    def _forward_layer_with_lor(
+        self,
+        layer: DecoderLayer,
+        layer_ix: int,
+        xs: torch.Tensor,
+        mask: torch.Tensor,
+        alpha_scalar: float,
+        apply_lor: bool,
+    ) -> torch.Tensor:
+        """Forward through a single layer, optionally with LoR adaptation."""
+        if not apply_lor or layer_ix not in self.lor_layers:
+            # Standard forward
+            return layer(q=xs, k=xs, v=xs, mask=mask)
+        
+        # Get adapted weights
+        adapted = self._get_adapted_weights(layer, layer_ix, alpha_scalar)
+        
+        # Manual forward with adapted weights
+        # Self-attention with adapted Q/K/O
+        B = xs.size(0)
+        attn = layer.self_attn
+        
+        # Project with adapted weights using F.linear
+        q = F.linear(xs, adapted['q'], None)
+        k = F.linear(xs, adapted['k'], None)
+        v = F.linear(xs, attn.v_proj.weight, None)  # V not adapted
+        
+        # Reshape for multi-head
+        q = q.view(B, -1, attn.num_heads, attn.head_dim).transpose(1, 2)
+        k = k.view(B, -1, attn.num_heads, attn.head_dim).transpose(1, 2)
+        v = v.view(B, -1, attn.num_heads, attn.head_dim).transpose(1, 2)
+        
+        # Scaled dot-product attention
+        scores = torch.einsum('bhse, bhte -> bhst', q, k) / math.sqrt(attn.head_dim)
+        if mask is not None:
+            if mask.ndim == 2:
+                mask = mask.unsqueeze(0).unsqueeze(0)
+            scores = scores + mask
+        
+        attn_weights = F.softmax(scores, dim=-1)
+        attn_out = torch.einsum('bhst, bhtd -> bshd', attn_weights, v)
+        attn_out = attn_out.contiguous().view(B, -1, attn.emb_dim)
+        
+        # Output projection with adapted weights
+        attn_out = F.linear(attn_out, adapted['o'], None)
+        attn_out = layer.dropout(attn_out)
+        xs = layer.norm1(xs + attn_out)
+        
+        # FFN - first layer normal, second layer adapted
+        h = layer.ffnn[0](xs)  # Linear
+        h = layer.ffnn[1](h)   # ReLU
+        h = layer.ffnn[2](h)   # Dropout
+        h = F.linear(h, adapted['mlp'], None)  # Adapted output
+        h = layer.dropout(h)
+        xs = layer.norm2(xs + h)
+        
+        return xs
     
     def forward(
         self,
@@ -341,15 +397,10 @@ class NL_MTP_Model(nn.Module):
         alpha = torch.sigmoid(self.alpha_gate(pre_time0_repr)).squeeze(-1)  # [B]
         alpha_scalar = alpha.mean().clamp(0, 1).item()
         
-        # Apply LoR if requested (in-place weight modification)
-        if apply_lor:
-            for i, layer in enumerate(self.layers, start=1):
-                self._apply_lor(layer, i, alpha_scalar)
-        
-        # Forward through transformer
+        # Forward through transformer layers
         xs = tokens
-        for layer in self.layers:
-            xs = layer(q=xs, k=xs, v=xs, mask=mask)
+        for i, layer in enumerate(self.layers):
+            xs = self._forward_layer_with_lor(layer, i, xs, mask, alpha_scalar, apply_lor)
         
         xs = self.norm(xs)
         

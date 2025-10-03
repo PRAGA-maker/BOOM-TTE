@@ -52,7 +52,7 @@ def train_epoch(
     epoch: int,
     device: str = "cuda",
     warmup_epochs: int = 5,
-    c_offset: float = 1.0,
+    c_offset: float = 400.0,  # Shift HoF to positive range: min(-300) + 400 = 100
     w_max: float = 20.0,
     support_threshold: float = 0.6,
 ) -> Dict[str, Any]:
@@ -95,8 +95,8 @@ def train_epoch(
         
         B = x_ctx.size(0)
         
-        # Stabilized log target
-        y_log = torch.log(torch.clamp(y - c_offset, min=1e-6))
+        # Stabilized log target (shift to positive range)
+        y_log = torch.log(torch.clamp(y + c_offset, min=1e-6))
         
         ###############################
         # Observed world (no LoR)
@@ -246,7 +246,7 @@ def evaluate(
     loaders: Tuple,
     delta: float,
     device: str = "cuda",
-    c_offset: float = 1.0,
+    c_offset: float = 400.0,  # Must match training offset
 ) -> Dict[str, Any]:
     """
     Evaluate on ID and OOD splits.
@@ -272,12 +272,12 @@ def evaluate(
             # Observed world
             out_obs = model(env_idx, x_ctx, mw, delta, apply_lor=False)
             m_obs = out_obs["m_obs"]
-            y_hat_obs = torch.exp(m_obs) + c_offset
+            y_hat_obs = torch.exp(m_obs) - c_offset
             
             # Policy world
             out_pol = model(env_idx, x_ctx, mw, delta, apply_lor=True)
             m_pol = out_pol["m_obs"]
-            y_hat_pol = torch.exp(m_pol) + c_offset
+            y_hat_pol = torch.exp(m_pol) - c_offset
             alpha = out_pol["alpha"]
             
             y_true_list.append(y)

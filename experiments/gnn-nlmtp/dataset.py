@@ -93,17 +93,17 @@ class HoFContextDataset(Dataset):
         return {
             "smiles": it["smiles"],
             "x_ctx": torch.from_numpy(it["x_ctx"]).float(),
-            "mw": torch.tensor([it["mw"]], dtype=torch.float32),
-            "y": torch.tensor([it["y"]], dtype=torch.float32),
-            "env_idx": torch.tensor([it["env_idx"]], dtype=torch.long),
+            "mw": torch.tensor(it["mw"], dtype=torch.float32),
+            "y": torch.tensor(it["y"], dtype=torch.float32),
+            "env_idx": torch.tensor(it["env_idx"], dtype=torch.long),
         }
 
 
 def collate_batch(batch: Any) -> Dict[str, torch.Tensor]:
     x_ctx = torch.stack([b["x_ctx"] for b in batch], dim=0)
-    mw = torch.cat([b["mw"] for b in batch], dim=0)
-    y = torch.cat([b["y"] for b in batch], dim=0)
-    env_idx = torch.cat([b["env_idx"] for b in batch], dim=0)
+    mw = torch.stack([b["mw"] for b in batch], dim=0)
+    y = torch.stack([b["y"] for b in batch], dim=0)
+    env_idx = torch.stack([b["env_idx"] for b in batch], dim=0)
     return {"x_ctx": x_ctx, "mw": mw, "y": y, "env_idx": env_idx}
 
 
